@@ -1,3 +1,11 @@
+# 1.2.0 / 2018-04-24
+
+This release has no functional-diffs against `v1.1.0` release.
+
+  * Fix copyright, add new copyright, change README
+  * Switch build system
+  * Remove GoBuilder config
+
 # 1.1.1 / 2016-10-13
 
   * Add Github releases publisher
