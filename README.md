@@ -1,6 +1,9 @@
-![License: Apache v2.0](https://badges.fyi/github/license/Jimdo/yaml-vault)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Luzifer/yaml-vault)](https://goreportcard.com/report/github.com/Luzifer/yaml-vault)
+![](https://badges.fyi/github/license/Luzifer/yaml-vault)
+![](https://badges.fyi/github/downloads/Luzifer/yaml-vault)
+![](https://badges.fyi/github/latest-release/Luzifer/yaml-vault)
 
-# Jimdo / yaml-vault
+# Luzifer / yaml-vault
 
 `yaml-vault` is a small utility to import data from a YAML file to Vault or export keys from Vault into a YAML file.
 
