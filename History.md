@@ -1,3 +1,7 @@
+# 1.3.1 / 2019-01-09
+
+  * Fix validate-tags and log-level
+
 # 1.3.0 / 2019-01-09
 
   * Update dependencies, switch to dep for vendoring
