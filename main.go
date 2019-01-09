@@ -21,14 +21,14 @@ import (
 
 var (
 	cfg = struct {
-		File           string   `flag:"file,f" default:"vault.yaml" description:"File to import from / export to" validate:"non-zero"`
+		File           string   `flag:"file,f" default:"vault.yaml" description:"File to import from / export to" validate:"nonzero"`
 		Import         bool     `flag:"import" default:"false" description:"Enable importing data into Vault"`
 		Export         bool     `flag:"export" default:"false" description:"Enable exporting data from Vault"`
 		ExportPaths    []string `flag:"export-paths" default:"secret" description:"Which paths to export"`
 		IgnoreErrors   bool     `flag:"ignore-errors" default:"false" description:"Do not exit on read/write errors"`
 		LogLevel       string   `flag:"log-level" default:"info" description:"Log level (debug, info, warn, error, fatal)"`
 		VaultAddress   string   `flag:"vault-addr" env:"VAULT_ADDR" default:"https://127.0.0.1:8200" description:"Vault API address"`
-		VaultToken     string   `flag:"vault-token" env:"VAULT_TOKEN" vardefault:"vault-token" description:"Specify a token to use instead of app-id auth" validate:"non-zero"`
+		VaultToken     string   `flag:"vault-token" env:"VAULT_TOKEN" vardefault:"vault-token" description:"Specify a token to use instead of app-id auth" validate:"nonzero"`
 		VersionAndExit bool     `flag:"version" default:"false" description:"Print program version and exit"`
 		Verbose        bool     `flag:"verbose,v" default:"false" description:"Print verbose output [DEPRECATED]"`
 	}{}
@@ -212,7 +212,7 @@ func importToVault(client *api.Client) error {
 				}
 				return errors.Wrapf(err, "Unable to delete path %q", field.Key)
 			}
-			log.WithField("path", field.Key).Info("Successfully deleted key")
+			log.WithField("path", field.Key).Debug("Successfully deleted key")
 		} else {
 			if _, err := client.Logical().Write(field.Key, field.Values); err != nil {
 				if cfg.IgnoreErrors {
