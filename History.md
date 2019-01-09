@@ -1,3 +1,9 @@
+# 1.3.0 / 2019-01-09
+
+  * Update dependencies, switch to dep for vendoring
+  * Improve code quality
+  * Remove travis config
+
 # 1.2.0 / 2018-04-24
 
 This release has no functional-diffs against `v1.1.0` release.
