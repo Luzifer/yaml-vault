@@ -1,3 +1,10 @@
+# 1.3.2 / 2021-09-29
+
+  * Lint: Add PR linting, fix linter errors
+  * CI: Auto-publish releases
+  * Add go modules support, update dependencies
+  * Remove old dep management / vendoring
+
 # 1.3.1 / 2019-01-09
 
   * Fix validate-tags and log-level
