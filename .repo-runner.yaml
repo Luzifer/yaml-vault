@@ -4,7 +4,7 @@ image: "reporunner/golang-alpine"
 checkout_dir: /go/src/github.com/Luzifer/yaml-vault
 
 commands:
-  - make publish
+  - make lint publish
 
 environment:
   DRAFT: 'false'

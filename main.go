@@ -19,6 +19,8 @@ import (
 	"github.com/Luzifer/rconfig/v2"
 )
 
+const filePermissionUserWrite = 0o600
+
 var (
 	cfg = struct {
 		File           string   `flag:"file,f" default:"vault.yaml" description:"File to import from / export to" validate:"nonzero"`
@@ -130,7 +132,7 @@ func exportFromVault(client *api.Client) error {
 		}
 
 		if !strings.HasSuffix(path, "/") {
-			path = path + "/"
+			path += "/"
 		}
 
 		if err := readRecurse(client, path, &out); err != nil {
@@ -143,7 +145,7 @@ func exportFromVault(client *api.Client) error {
 		return errors.Wrap(err, "Unable to marshal yaml")
 	}
 
-	return ioutil.WriteFile(cfg.File, data, 0600)
+	return ioutil.WriteFile(cfg.File, data, filePermissionUserWrite)
 }
 
 func readRecurse(client *api.Client, path string, out *importFile) error {
