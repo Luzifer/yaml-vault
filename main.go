@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	korvike "github.com/Luzifer/korvike/functions"
-	"github.com/Luzifer/rconfig"
+	"github.com/Luzifer/rconfig/v2"
 )
 
 var (
