@@ -3,17 +3,15 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/mitchellh/go-homedir"
-	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 
 	korvike "github.com/Luzifer/korvike/functions"
 	"github.com/Luzifer/rconfig/v2"
@@ -32,7 +30,6 @@ var (
 		VaultAddress   string   `flag:"vault-addr" env:"VAULT_ADDR" default:"https://127.0.0.1:8200" description:"Vault API address"`
 		VaultToken     string   `flag:"vault-token" env:"VAULT_TOKEN" vardefault:"vault-token" description:"Specify a token to use instead of app-id auth" validate:"nonzero"`
 		VersionAndExit bool     `flag:"version" default:"false" description:"Print program version and exit"`
-		Verbose        bool     `flag:"verbose,v" default:"false" description:"Print verbose output [DEPRECATED]"`
 	}{}
 
 	version = "dev"
@@ -56,7 +53,7 @@ func vaultTokenFromDisk() string {
 		return ""
 	}
 
-	data, err := ioutil.ReadFile(vf)
+	data, err := os.ReadFile(vf) //#nosec G304 // Intended to read file from disk
 	if err != nil {
 		return ""
 	}
@@ -64,54 +61,56 @@ func vaultTokenFromDisk() string {
 	return string(data)
 }
 
-func init() {
+func initApp() error {
+	rconfig.AutoEnv(true)
 	rconfig.SetVariableDefaults(map[string]string{
 		"vault-token": vaultTokenFromDisk(),
 	})
 	if err := rconfig.ParseAndValidate(&cfg); err != nil {
-		log.WithError(err).Fatal("Unable to parse commandline options")
+		return fmt.Errorf("parsing CLI options: %w", err)
+	}
+
+	l, err := logrus.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		return fmt.Errorf("parsing log-level: %w", err)
+	}
+	logrus.SetLevel(l)
+
+	return nil
+}
+
+func main() {
+	var err error
+	if err = initApp(); err != nil {
+		logrus.WithError(err).Fatal("initializing app")
 	}
 
 	if cfg.VersionAndExit {
-		fmt.Printf("vault2env %s\n", version)
+		fmt.Printf("yaml-vault %s\n", version) //nolint:forbidigo
 		os.Exit(0)
 	}
 
-	if l, err := log.ParseLevel(cfg.LogLevel); err != nil {
-		log.WithError(err).Fatal("Unable to parse log level")
-	} else {
-		log.SetLevel(l)
-	}
-
-	if cfg.Verbose {
-		// Backwards compatibility
-		log.SetLevel(log.DebugLevel)
-	}
-
 	if cfg.Export == cfg.Import {
-		log.Fatal("You need to either import or export")
+		logrus.Fatal("either import or export must be set")
 	}
 
 	if _, err := os.Stat(cfg.File); (err == nil && cfg.Export) || (err != nil && cfg.Import) {
 		if cfg.Export {
-			log.Fatal("Output file exists, stopping now.")
+			logrus.Fatal("output file exists, stopping now.")
 		}
-		log.Fatal("Input file does not exist, stopping now.")
+		logrus.Fatal("input file does not exist, stopping now.")
 	}
-}
 
-func main() {
 	client, err := api.NewClient(&api.Config{
 		Address: cfg.VaultAddress,
 	})
 	if err != nil {
-		log.WithError(err).Fatal("Unable to create client")
+		logrus.WithError(err).Fatal("creating Vault client")
 	}
 
 	client.SetToken(cfg.VaultToken)
 
 	var ex execFunction
-
 	if cfg.Export {
 		ex = exportFromVault
 	} else {
@@ -119,7 +118,7 @@ func main() {
 	}
 
 	if err = ex(client); err != nil {
-		log.WithError(err).Fatal("Unable to execute requested action")
+		logrus.WithError(err).Fatal("executing requested action")
 	}
 }
 
@@ -136,45 +135,106 @@ func exportFromVault(client *api.Client) error {
 		}
 
 		if err := readRecurse(client, path, &out); err != nil {
-			return errors.Wrap(err, "Unable to read from Vault")
+			return fmt.Errorf("reading from Vault: %w", err)
 		}
 	}
 
 	data, err := yaml.Marshal(out)
 	if err != nil {
-		return errors.Wrap(err, "Unable to marshal yaml")
+		return fmt.Errorf("marshalling YAML: %w", err)
 	}
 
-	return ioutil.WriteFile(cfg.File, data, filePermissionUserWrite)
+	if err = os.WriteFile(cfg.File, data, filePermissionUserWrite); err != nil {
+		return fmt.Errorf("writing file: %w", err)
+	}
+
+	return nil
+}
+
+func importToVault(client *api.Client) error {
+	keysRaw, err := os.ReadFile(cfg.File)
+	if err != nil {
+		return fmt.Errorf("reading input-file: %w", err)
+	}
+
+	keysRaw, err = parseImportFile(keysRaw)
+	if err != nil {
+		return fmt.Errorf("parsing input file: %w", err)
+	}
+
+	var keys importFile
+	if err := yaml.Unmarshal(keysRaw, &keys); err != nil {
+		return fmt.Errorf("unmarshalling input file: %w", err)
+	}
+
+	for _, field := range keys.Keys {
+		logger := logrus.WithField("path", field.Key)
+
+		if field.State == "absent" {
+			if _, err := client.Logical().Delete(field.Key); err != nil {
+				if cfg.IgnoreErrors {
+					logger.WithError(err).Error("deleting key")
+					continue
+				}
+				return fmt.Errorf("deleting path %q: %w", field.Key, err)
+			}
+			logger.Debug("deleted key")
+		} else {
+			if _, err := client.Logical().Write(field.Key, field.Values); err != nil {
+				if cfg.IgnoreErrors {
+					logger.WithError(err).Error("writing data to key")
+					continue
+				}
+				return fmt.Errorf("writing path %q: %w", field.Key, err)
+			}
+			logger.Debug("wrote data to key")
+		}
+	}
+
+	return nil
+}
+
+func parseImportFile(in []byte) (out []byte, err error) {
+	t, err := template.New("input file").Funcs(korvike.GetFunctionMap()).Parse(string(in))
+	if err != nil {
+		return nil, fmt.Errorf("parsing template: %w", err)
+	}
+
+	buf := new(bytes.Buffer)
+	if err = t.Execute(buf, nil); err != nil {
+		return nil, fmt.Errorf("executing template: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 func readRecurse(client *api.Client, path string, out *importFile) error {
 	if !strings.HasSuffix(path, "/") {
 		secret, err := client.Logical().Read(path)
 		if err != nil {
-			return errors.Wrapf(err, "Unable to read path %q", path)
+			return fmt.Errorf("reading path %q: %w", path, err)
 		}
 
 		if secret == nil {
 			if cfg.IgnoreErrors {
-				log.WithField("path", path).Info("Unable to read nil secret")
+				logrus.WithField("path", path).Info("read nil secret")
 				return nil
 			}
-			return errors.Errorf("Unable to read non-existent path %s", path)
+			return fmt.Errorf("read non-existent path %q", path)
 		}
 
 		out.Keys = append(out.Keys, importField{Key: path, Values: secret.Data})
-		log.WithField("path", path).Debug("Successfully read data from key")
+		logrus.WithField("path", path).Debug("read data from key")
 		return nil
 	}
 
 	secret, err := client.Logical().List(path)
 	if err != nil {
 		if cfg.IgnoreErrors {
-			log.WithError(err).WithField("path", path).Error("Error reading secret")
+			logrus.WithError(err).WithField("path", path).Error("reading secret")
 			return nil
 		}
-		return errors.Wrapf(err, "Error reading %s", path)
+		return fmt.Errorf("reading path %q: %w", path, err)
 	}
 
 	if secret != nil && secret.Data["keys"] != nil {
@@ -187,56 +247,4 @@ func readRecurse(client *api.Client, path string, out *importFile) error {
 	}
 
 	return nil
-}
-
-func importToVault(client *api.Client) error {
-	keysRaw, err := ioutil.ReadFile(cfg.File)
-	if err != nil {
-		return errors.Wrap(err, "Unable to read input file")
-	}
-
-	keysRaw, err = parseImportFile(keysRaw)
-	if err != nil {
-		return errors.Wrap(err, "Unable to parse input file")
-	}
-
-	var keys importFile
-	if err := yaml.Unmarshal(keysRaw, &keys); err != nil {
-		return errors.Wrap(err, "Unable to unmarshal input file")
-	}
-
-	for _, field := range keys.Keys {
-		if field.State == "absent" {
-			if _, err := client.Logical().Delete(field.Key); err != nil {
-				if cfg.IgnoreErrors {
-					log.WithError(err).WithField("path", field.Key).Error("Error while deleting key")
-					continue
-				}
-				return errors.Wrapf(err, "Unable to delete path %q", field.Key)
-			}
-			log.WithField("path", field.Key).Debug("Successfully deleted key")
-		} else {
-			if _, err := client.Logical().Write(field.Key, field.Values); err != nil {
-				if cfg.IgnoreErrors {
-					log.WithError(err).WithField("path", field.Key).Error("Error while writing data to key")
-					continue
-				}
-				return errors.Wrapf(err, "Unable to write path %q", field.Key)
-			}
-			log.WithField("path", field.Key).Debug("Successfully wrote data to key")
-		}
-	}
-
-	return nil
-}
-
-func parseImportFile(in []byte) (out []byte, err error) {
-	t, err := template.New("input file").Funcs(korvike.GetFunctionMap()).Parse(string(in))
-	if err != nil {
-		return nil, errors.Wrap(err, "Unable to parse template")
-	}
-
-	buf := bytes.NewBuffer([]byte{})
-	err = t.Execute(buf, nil)
-	return buf.Bytes(), errors.Wrap(err, "Unable to execute template")
 }
