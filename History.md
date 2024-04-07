@@ -1,3 +1,8 @@
+# 1.4.0 / 2024-04-07
+
+  * Replace CI system
+  * Modernize code, update depdendencies
+
 # 1.3.2 / 2021-09-29
 
   * Lint: Add PR linting, fix linter errors
