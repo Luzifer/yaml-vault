@@ -1,3 +1,7 @@
+# 1.4.1 / 2024-10-29
+
+  * Update Go dependencies
+
 # 1.4.0 / 2024-04-07
 
   * Replace CI system
