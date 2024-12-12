@@ -1,3 +1,7 @@
+# 1.4.3 / 2024-12-12
+
+  * Update linter config
+
 # 1.4.2 / 2024-12-12
 
   * Update Go dependencies
