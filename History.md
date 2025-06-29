@@ -1,3 +1,11 @@
+# 1.4.4 / 2025-06-29
+
+  * ci(deps): pin dependencies
+  * ci: update golangci-lint config
+  * ci: update build environment
+  * ci: enable renovate
+  * chore: update dependencies
+
 # 1.4.3 / 2024-12-12
 
   * Update linter config
