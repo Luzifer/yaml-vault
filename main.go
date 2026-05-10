@@ -1,3 +1,4 @@
+// YAML-Vault Utility
 package main
 
 import (
@@ -7,59 +8,45 @@ import (
 	"strings"
 	"text/template"
 
-	"gopkg.in/yaml.v3"
-
+	korvike "github.com/Luzifer/korvike/functions"
+	"github.com/Luzifer/rconfig/v2"
 	"github.com/hashicorp/vault/api"
 	"github.com/mitchellh/go-homedir"
 	"github.com/sirupsen/logrus"
-
-	korvike "github.com/Luzifer/korvike/functions"
-	"github.com/Luzifer/rconfig/v2"
+	"gopkg.in/yaml.v3"
 )
 
 const filePermissionUserWrite = 0o600
 
+type (
+	execFunction func(*api.Client) error
+
+	importField struct {
+		Key    string
+		State  string
+		Values map[string]any
+	}
+
+	importFile struct {
+		Keys []importField
+	}
+)
+
 var (
 	cfg = struct {
-		File           string   `flag:"file,f" default:"vault.yaml" description:"File to import from / export to" validate:"nonzero"` //revive:disable-line:struct-tag
+		File           string   `flag:"file,f" default:"vault.yaml" description:"File to import from / export to" validate:"nonzero"` //revive:disable-line:struct-tag // valid for our validator
 		Import         bool     `flag:"import" default:"false" description:"Enable importing data into Vault"`
 		Export         bool     `flag:"export" default:"false" description:"Enable exporting data from Vault"`
 		ExportPaths    []string `flag:"export-paths" default:"secret" description:"Which paths to export"`
 		IgnoreErrors   bool     `flag:"ignore-errors" default:"false" description:"Do not exit on read/write errors"`
 		LogLevel       string   `flag:"log-level" default:"info" description:"Log level (debug, info, warn, error, fatal)"`
 		VaultAddress   string   `flag:"vault-addr" env:"VAULT_ADDR" default:"https://127.0.0.1:8200" description:"Vault API address"`
-		VaultToken     string   `flag:"vault-token" env:"VAULT_TOKEN" vardefault:"vault-token" description:"Specify a token to use instead of app-id auth" validate:"nonzero"` //revive:disable-line:struct-tag
+		VaultToken     string   `flag:"vault-token" env:"VAULT_TOKEN" vardefault:"vault-token" description:"Specify a token to use instead of app-id auth" validate:"nonzero"` //revive:disable-line:struct-tag // valid for our validator
 		VersionAndExit bool     `flag:"version" default:"false" description:"Print program version and exit"`
 	}{}
 
 	version = "dev"
 )
-
-type importFile struct {
-	Keys []importField
-}
-
-type importField struct {
-	Key    string
-	State  string
-	Values map[string]interface{}
-}
-
-type execFunction func(*api.Client) error
-
-func vaultTokenFromDisk() string {
-	vf, err := homedir.Expand("~/.vault-token")
-	if err != nil {
-		return ""
-	}
-
-	data, err := os.ReadFile(vf) //#nosec G304 // Intended to read file from disk
-	if err != nil {
-		return ""
-	}
-
-	return string(data)
-}
 
 func initApp() error {
 	rconfig.AutoEnv(true)
@@ -86,7 +73,7 @@ func main() {
 	}
 
 	if cfg.VersionAndExit {
-		fmt.Printf("yaml-vault %s\n", version) //nolint:forbidigo
+		fmt.Printf("yaml-vault %s\n", version) //nolint:forbidigo // printing version to stdout is fine
 		os.Exit(0)
 	}
 
@@ -238,7 +225,7 @@ func readRecurse(client *api.Client, path string, out *importFile) error {
 	}
 
 	if secret != nil && secret.Data["keys"] != nil {
-		for _, k := range secret.Data["keys"].([]interface{}) {
+		for _, k := range secret.Data["keys"].([]any) {
 			if err := readRecurse(client, path+k.(string), out); err != nil {
 				return err
 			}
@@ -247,4 +234,18 @@ func readRecurse(client *api.Client, path string, out *importFile) error {
 	}
 
 	return nil
+}
+
+func vaultTokenFromDisk() string {
+	vf, err := homedir.Expand("~/.vault-token")
+	if err != nil {
+		return ""
+	}
+
+	data, err := os.ReadFile(vf) //#nosec:G304 // Intended to read file from disk
+	if err != nil {
+		return ""
+	}
+
+	return string(data)
 }
