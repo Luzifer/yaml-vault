@@ -2,7 +2,7 @@ module github.com/Luzifer/yaml-vault
 
 go 1.25.7
 
-toolchain go1.26.2
+toolchain go1.26.3
 
 require (
 	github.com/Luzifer/korvike/functions v1.0.3
